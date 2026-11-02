@@ -31,6 +31,7 @@ env:
 
 jobs:
   handle-pr:
+    if: github.repository_owner == 'mozilla' && vars.LANDO_WEB_APP_ID != ''
     runs-on: ubuntu-latest
     steps:
 
