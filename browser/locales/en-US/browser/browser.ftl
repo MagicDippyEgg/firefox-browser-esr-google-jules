@@ -299,16 +299,6 @@ quickactions-firefoxview = Open { -firefoxview-brand-name }
 # should use a word related to the existing translation.
 quickactions-cmd-firefoxview = open { -firefoxview-brand-name }, { -firefoxview-brand-name }, open view, view
 
-# Aether Command Palette Actions
-quickactions-aether-focus = Toggle Aether Focus Mode
-quickactions-cmd-aether-focus = focus, focus mode, reader, zen, zen mode, reading view
-
-quickactions-aether-ghost = Open Ghost Sanctuary (Private)
-quickactions-cmd-aether-ghost = ghost, sanctuary, incognito, private, ghost sanctuary, ghost mode
-
-quickactions-aether-clean = Aether Clean Slate (Purge Cache & History)
-quickactions-cmd-aether-clean = clean, purge, slate, aether clean, flush cache
-
 # Opens SUMO home page
 quickactions-help = { -brand-product-name } help
 quickactions-cmd-help = help, support
