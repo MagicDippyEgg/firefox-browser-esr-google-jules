@@ -1,0 +1,340 @@
+name: Build Aether
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug_build:
+        description: "Build a debug build (slower, larger, with assertions)"
+        type: boolean
+        default: false
+  push:
+    branches: [main, aether-browser]
+    tags: ["v*"]
+  release:
+    types: [published]
+
+concurrency:
+  group: build-aether-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Aether (Linux x86_64)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Free up disk space on the runner
+        run: |
+          set -eux
+          echo "=== Disk usage before cleanup ==="
+          df -h /
+          sudo df -h /
+
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/local/.ghcup \
+            /usr/local/share/ghc \
+            /usr/local/share/.ghc \
+            /opt/ghc \
+            /opt/cabal \
+            /opt/haskell \
+            /usr/local/share/openssl \
+            /usr/local/wpm \
+            /usr/local/aws-cli \
+            /usr/local/aws-sam-cli \
+            /usr/lib/firefox \
+            /usr/share/miniconda \
+            /opt/microsoft \
+            /opt/pipx \
+            /usr/share/az_9.3 \
+            /usr/share/az_10 \
+            /usr/share/rust \
+            /usr/local/kotlin \
+            /usr/local/konan \
+            /usr/lib/jvm \
+            /usr/lib/mono \
+            /usr/lib/postgresql \
+            /usr/lib/mysql \
+            /usr/share/swift \
+            /usr/local/graalvm \
+            /usr/local/jvm \
+            /usr/local/share/Chromium \
+            /usr/local/share/chromedriver \
+            /usr/local/share/edge \
+            /usr/local/share/edge-driver \
+            /usr/lib/google-cloud-sdk \
+            /usr/lib/google-cloud-cli \
+            /usr/lib/kubectl \
+            /usr/local/share/phantomjs* \
+            /usr/local/share/vcpkg \
+            2>/dev/null || true
+
+          sudo docker image prune -af 2>/dev/null || true
+          sudo docker system prune -af --volumes 2>/dev/null || true
+
+          sudo apt-get purge -y \
+            azure-cli google-chrome-stable microsoft-edge-stable \
+            firefox postgresql* mysql* dotnet* mono-* \
+            ghc haskell-platform cabal-install \
+            2>/dev/null || true
+          sudo apt-get autoremove -y --purge 2>/dev/null || true
+
+          echo "=== Disk usage after cleanup ==="
+          df -h /
+
+      - name: Add swap (if needed)
+        run: |
+          set -eux
+          free -h || true
+          swapon --show || true
+          if [ ! -f /aether-swap ]; then
+            sudo fallocate -l 12G /aether-swap || sudo dd if=/dev/zero of=/aether-swap bs=1M count=12288
+            sudo chmod 600 /aether-swap
+            sudo mkswap /aether-swap
+            sudo swapon /aether-swap || true
+          fi
+          free -h
+          swapon --show || true
+
+      - name: Checkout Aether source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Mozilla build dependencies
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y \
+            curl python3 python3-venv python3-dev git make \
+            pkg-config libdbus-1-dev libdrm-dev \
+            libgtk-3-dev libglib2.0-dev libnss3-dev libnspr4-dev \
+            libasound2-dev libpulse-dev \
+            libx11-xcb-dev libxtst-dev libxrandr-dev \
+            libxss-dev libxcursor-dev libxcomposite-dev \
+            libxdamage-dev libxinerama-dev libxi-dev \
+            libpango1.0-dev libcairo2-dev \
+            libgconf-2-4 libgconf2-dev 2>/dev/null || true
+          sudo apt-get install -y watchman 2>/dev/null || true
+
+          MOZ_BOOTSTRAP=1 ./mach --no-interactive bootstrap --application-choice browser
+
+      - name: Install sccache
+        env:
+          SCCACHE_VERSION: "0.8.2"
+        run: |
+          set -eux
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            x86_64)  SCCACHE_ARCH="x86_64";;
+            aarch64) SCCACHE_ARCH="aarch64";;
+            *) echo "Unsupported arch: $ARCH"; exit 1;;
+          esac
+          URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-${ARCH}-unknown-linux-musl.tar.gz"
+          curl -fsSL "$URL" | sudo tar -xz --strip-components=1 -C /usr/local/bin sccache-v${SCCACHE_VERSION}-${ARCH}-unknown-linux-musl/sccache
+          sudo chmod +x /usr/local/bin/sccache
+          sccache --version
+          sccache --start-server || true
+
+      - name: Cache sccache artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            /home/runner/.cache/sccache
+            /home/runner/.cargo/registry
+            /home/runner/.cargo/git
+          key: aether-sccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            aether-sccache-${{ runner.os }}-
+
+      - name: Install Aether mozconfig
+        run: |
+          set -eux
+          cp build/aether/mozconfig mozconfig
+          if [ "${{ github.event.inputs.debug_build }}" = "true" ]; then
+            {
+              echo ""
+              echo "# Debug overrides (workflow_dispatch with debug_build=true)."
+              echo "ac_add_options --enable-debug"
+              echo "ac_add_options --disable-optimize"
+              echo "unset RUSTC_OPT_LEVEL"
+            } >> mozconfig
+          fi
+          echo "=== mozconfig ==="
+          cat mozconfig
+
+      - name: Fetch Breakpad linux_syscall_support.h
+        run: |
+          set -eux
+          LSS_DIR="toolkit/crashreporter/google-breakpad/src/third_party/lss"
+          mkdir -p "$LSS_DIR"
+          curl -fsSL "https://chromium.googlesource.com/linux-syscall-support/+/refs/heads/main/linux_syscall_support.h?format=TEXT" \
+            | base64 -d > "$LSS_DIR/linux_syscall_support.h"
+          echo "Fetched linux_syscall_support.h:"
+          ls -la "$LSS_DIR/linux_syscall_support.h"
+          echo "First 5 lines:"
+          head -5 "$LSS_DIR/linux_syscall_support.h"
+
+      - name: Configure the build
+        run: |
+          set -eux
+          ./mach configure
+
+      - name: Build Aether
+        env:
+          SCCACHE_DIRECT: "false"
+          SCCACHE_IDLE_TIMEOUT: "0"
+          RUSTC_WRAPPER: sccache
+          CARGO_INCREMENTAL: "0"
+          MOZ_BUILD_HOOK: ""
+        run: |
+          set -eux
+          ./mach build --jobs 3
+          sccache --show-stats || true
+
+      - name: Package Aether
+        run: |
+          set -eux
+          ./mach package
+          echo "=== dist directory ==="
+          ls -lh obj-aether/dist/ | head -40
+          echo "=== packaged archives ==="
+          ls -lh obj-aether/dist/*.tar.* obj-aether/dist/*.zip 2>/dev/null || true
+
+      - name: Stage artifact
+        run: |
+          set -eux
+          STAGE="$RUNNER_TEMP/aether-stage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+
+          PKG_TARBALL=$(ls obj-aether/dist/aether-*.en-US.linux-x86_64.tar.xz obj-aether/dist/firefox-*.en-US.linux-x86_64.tar.xz 2>/dev/null | head -1)
+          echo "Packaged tarball: $PKG_TARBALL"
+          ls -lh "$PKG_TARBALL"
+
+          tar -C "$STAGE" -xf "$PKG_TARBALL"
+
+          cp build/aether/install.sh "$STAGE/install.sh"
+          chmod +x "$STAGE/install.sh"
+          cp build/aether/aether.desktop "$STAGE/aether.desktop"
+
+          APP_DIR=$(ls -d "$STAGE"/aether "$STAGE"/firefox 2>/dev/null | head -1)
+          if [ -d "$STAGE/firefox" ] && [ ! -d "$STAGE/aether" ]; then
+            mv "$STAGE/firefox" "$STAGE/aether"
+          fi
+
+          echo "=== Checking for dangling symlinks ==="
+          DANGLING_COUNT=$(find "$STAGE/aether" -type l ! -exec test -e {} \; -print | wc -l)
+          if [ "$DANGLING_COUNT" -gt 0 ]; then
+            echo "ERROR: $DANGLING_COUNT dangling symlinks found in packaged tarball!"
+            find "$STAGE/aether" -type l ! -exec test -e {} \; -print | head -10
+            echo "This should not happen — ./mach package should produce real files."
+            exit 1
+          fi
+          echo "OK: no dangling symlinks."
+
+          echo "=== ldd aether (build machine) ===" > "$STAGE/dependencies.txt"
+          BIN_PATH="$STAGE/aether/aether"
+          [ ! -f "$BIN_PATH" ] && BIN_PATH="$STAGE/aether/firefox"
+          ldd "$BIN_PATH" >> "$STAGE/dependencies.txt" 2>&1 || true
+          echo "" >> "$STAGE/dependencies.txt"
+          echo "=== ldd libxul.so (build machine) ===" >> "$STAGE/dependencies.txt"
+          ldd "$STAGE/aether/libxul.so" >> "$STAGE/dependencies.txt" 2>&1 || true
+          echo "" >> "$STAGE/dependencies.txt"
+          echo "=== NEEDED entries (objdump -p aether) ===" >> "$STAGE/dependencies.txt"
+          objdump -p "$BIN_PATH" | grep NEEDED >> "$STAGE/dependencies.txt" 2>&1 || true
+          echo "" >> "$STAGE/dependencies.txt"
+          echo "=== NEEDED entries (objdump -p libxul.so) ===" >> "$STAGE/dependencies.txt"
+          objdump -p "$STAGE/aether/libxul.so" | grep NEEDED >> "$STAGE/dependencies.txt" 2>&1 || true
+
+          MISSING=$(grep "not found" "$STAGE/dependencies.txt" || true)
+          if [ -n "$MISSING" ]; then
+            echo "WARNING: Missing libraries detected on build machine:"
+            echo "$MISSING"
+          fi
+
+          cat > "$STAGE/README.txt" <<'EOF'
+          Aether — the calm browser.
+          Built from source by GitHub Actions.
+
+          ─────────────────────────────────────────────────────────────
+          TO RUN
+          ─────────────────────────────────────────────────────────────
+
+            ./aether/aether                          # launches Aether
+            ./aether/aether --new-tab about:aether     # opens the Aether welcome page
+
+          ─────────────────────────────────────────────────────────────
+          IF YOU GET "Couldn't load XPCOM"
+          ─────────────────────────────────────────────────────────────
+
+          That error means Aether can't find a system library it needs.
+          Install the runtime dependencies:
+
+            # Ubuntu / Debian:
+            sudo apt update
+            sudo apt install -y \
+              libgtk-3-0 libdbus-glib-1-2 libxt6 libasound2 \
+              libnss3 libstdc++6 libgcc-s1 \
+              libpango-1.0-0 libcairo2 libfreetype6 libfontconfig1 \
+              libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxdamage1 \
+              libxext6 libxfixes3 libxrandr2 libxrender1 libxtst6 \
+              libglib2.0-0 libatk1.0-0 libatk-bridge2.0-0 libepoxy0 \
+              libwayland-client0 libwayland-server0 libgbm1
+
+            # Fedora / RHEL:
+            sudo dnf install -y \
+              gtk3 dbus-glib libXt alsa-lib nss \
+              pango cairo freetype fontconfig \
+              libX11 libX11-xcb libxcb libXcomposite libXdamage \
+              libXext libXfixes libXrandr libXrender libXtst \
+              glib2 atk at-spi2-atk libepoxy mesa-libgbm
+
+          On newer Ubuntu (24.04+), the package is `libasound2t64`
+          instead of `libasound2`.
+
+          See `dependencies.txt` in this archive for the full ldd output
+          from the build machine.
+
+          ─────────────────────────────────────────────────────────────
+          ABOUT AETHER
+          ─────────────────────────────────────────────────────────────
+
+          Aether is a fork of Mozilla Firefox ESR. It preserves full web
+          compatibility and all of Firefox's underlying browser engine.
+          EOF
+
+          TAR_NAME="aether-browser-linux-x86_64-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}.tar.xz"
+          tar -C "$STAGE" -cJf "$RUNNER_TEMP/$TAR_NAME" aether README.txt dependencies.txt install.sh aether.desktop
+          ls -lh "$RUNNER_TEMP/$TAR_NAME"
+          echo "TAR_NAME=$TAR_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload Aether artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aether-browser-linux-x86_64
+          path: ${{ runner.temp }}/${{ env.TAR_NAME }}
+          retention-days: 90
+          compression-level: 0
+
+      - name: Diagnostics — config.log tail
+        if: failure()
+        run: |
+          echo "=== tail of obj-aether/config.log ==="
+          tail -200 obj-aether/config.log 2>/dev/null || echo "(no config.log)"
+          echo "=== disk usage at failure ==="
+          df -h /
+          echo "=== memory at failure ==="
+          free -h
+          sccache --show-stats 2>/dev/null || true
+
+      - name: Diagnostics — upload full build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aether-build-logs-failure
+          path: |
+            obj-aether/config.log
+            obj-aether/mozinfo.json
+          retention-days: 14
+          if-no-files-found: ignore
