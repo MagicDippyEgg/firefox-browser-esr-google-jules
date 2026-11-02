@@ -1683,3 +1683,45 @@ setting-pane[onsearchpane] {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- AETHER BROWSER SETTINGS REDESIGN --- */
+:root {
+  --in-content-page-background: #0c1017 !important;
+  --in-content-page-color: #e2e8f0 !important;
+  --in-content-box-background: rgba(22, 27, 39, 0.75) !important;
+  --in-content-box-border-color: rgba(255, 255, 255, 0.08) !important;
+  --in-content-border-active: #00e5ff !important;
+  --in-content-category-text-selected: #00e5ff !important;
+  --in-content-category-background-selected: rgba(124, 77, 255, 0.18) !important;
+  --in-content-primary-button-background: #7c4dff !important;
+  --in-content-primary-button-text-color: #ffffff !important;
+  --in-content-primary-button-background-hover: #9067ff !important;
+  --in-content-primary-button-background-active: #6536e0 !important;
+}
+
+#preferences-root, #preferences-body {
+  background-color: #0c1017 !important;
+  color: #e2e8f0 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif !important;
+}
+
+#categories > .category[selected] {
+  background: linear-gradient(90deg, rgba(124, 77, 255, 0.25) 0%, rgba(0, 229, 255, 0.05) 100%) !important;
+  border-left: 3px solid #00e5ff !important;
+  border-radius: 6px !important;
+  color: #00e5ff !important;
+}
+
+.pane-container {
+  background: transparent !important;
+}
+
+groupbox {
+  background: rgba(22, 27, 39, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(16px) !important;
+  padding: 16px !important;
+  margin-bottom: 20px !important;
+}

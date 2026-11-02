@@ -134,6 +134,38 @@ const DEFAULT_ACTIONS = {
       controller.browserWindow.FirefoxViewHandler.openTab();
     },
   },
+  aetherFocus: {
+    l10nCommands: ["quickactions-cmd-aether-focus"],
+    icon: "chrome://global/skin/icons/reader-mode.svg",
+    label: "quickactions-aether-focus",
+    onPick: (_queryContext, controller) => {
+      let win = controller.browserWindow;
+      let button = win.document.getElementById("reader-mode-button");
+      if (button && !button.hidden) {
+        button.click();
+      } else {
+        win.toggleReaderMode();
+      }
+    },
+  },
+  aetherGhost: {
+    l10nCommands: ["quickactions-cmd-aether-ghost"],
+    icon: "chrome://browser/skin/privatebrowsing/favicon.svg",
+    label: "quickactions-aether-ghost",
+    onPick: (_queryContext, controller) => {
+      controller.browserWindow.OpenBrowserWindow({ private: true });
+    },
+  },
+  aetherClean: {
+    l10nCommands: ["quickactions-cmd-aether-clean"],
+    icon: "chrome://browser/skin/forget.svg",
+    label: "quickactions-aether-clean",
+    onPick: (_queryContext, controller) => {
+      controller.browserWindow.document
+        .getElementById("Tools:Sanitize")
+        .doCommand();
+    },
+  },
   inspect: {
     l10nCommands: ["quickactions-cmd-inspector2"],
     icon: "chrome://devtools/skin/images/open-inspector.svg",
