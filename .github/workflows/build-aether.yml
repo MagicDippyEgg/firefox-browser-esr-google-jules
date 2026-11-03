@@ -165,17 +165,21 @@ jobs:
           echo "=== mozconfig ==="
           cat mozconfig
 
-      - name: Fetch Breakpad linux_syscall_support.h
+      - name: Ensure Breakpad linux_syscall_support.h
         run: |
           set -eux
           LSS_DIR="toolkit/crashreporter/google-breakpad/src/third_party/lss"
           mkdir -p "$LSS_DIR"
-          curl -fsSL "https://chromium.googlesource.com/linux-syscall-support/+/refs/heads/main/linux_syscall_support.h?format=TEXT" \
-            | base64 -d > "$LSS_DIR/linux_syscall_support.h"
-          echo "Fetched linux_syscall_support.h:"
-          ls -la "$LSS_DIR/linux_syscall_support.h"
-          echo "First 5 lines:"
-          head -5 "$LSS_DIR/linux_syscall_support.h"
+          if [ ! -s "$LSS_DIR/linux_syscall_support.h" ]; then
+            echo "Fetching linux_syscall_support.h with retry..."
+            curl -fsSL --retry 5 --retry-connrefused "https://chromium.googlesource.com/linux-syscall-support/+/refs/heads/main/linux_syscall_support.h?format=TEXT"               | base64 -d > "$LSS_DIR/linux_syscall_support.h" || true
+          fi
+          if [ -s "$LSS_DIR/linux_syscall_support.h" ]; then
+            echo "linux_syscall_support.h verified present."
+            head -5 "$LSS_DIR/linux_syscall_support.h"
+          else
+            echo "Notice: linux_syscall_support.h not present (crashreporter is disabled in mozconfig)."
+          fi
 
       - name: Configure the build
         run: |

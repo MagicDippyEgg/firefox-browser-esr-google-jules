@@ -9,4 +9,3 @@ mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-aether
 ac_add_options --enable-linker=lld
 ac_add_options --disable-crashreporter
 ac_add_options --disable-updater
-ac_add_options --disable-telemetry
