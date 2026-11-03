@@ -195,9 +195,8 @@ jobs:
           MOZ_BUILD_HOOK: ""
         run: |
           set -eux
-          NPROC=$(nproc)
-          JOBS=$(( NPROC > 2 ? NPROC : 2 ))
-          ./mach build --jobs "$JOBS" -v
+          # Limit parallel compilation jobs to 2 to prevent host OOM on GitHub 2-core / 7GB runner
+          ./mach build --jobs 2
           sccache --show-stats || true
 
       - name: Package Aether
