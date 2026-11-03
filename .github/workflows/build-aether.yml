@@ -184,14 +184,16 @@ jobs:
 
       - name: Build Aether
         env:
-          SCCACHE_DIRECT: "false"
+          SCCACHE_DIRECT: "true"
           SCCACHE_IDLE_TIMEOUT: "0"
           RUSTC_WRAPPER: sccache
           CARGO_INCREMENTAL: "0"
           MOZ_BUILD_HOOK: ""
         run: |
           set -eux
-          ./mach build --jobs 3
+          NPROC=$(nproc)
+          JOBS=$(( NPROC > 2 ? NPROC : 2 ))
+          ./mach build --jobs "$JOBS" -v
           sccache --show-stats || true
 
       - name: Package Aether
