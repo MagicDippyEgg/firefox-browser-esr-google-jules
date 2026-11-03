@@ -19,4 +19,5 @@ XPCSHELL_TESTS_MANIFESTS += [
 
 JAR_MANIFESTS += ["addon-jar.mn"]
 
-DIRS += ["webext-glue"]
+# Standalone train-hop XPI packaging disabled in Aether
+# DIRS += ["webext-glue"]
