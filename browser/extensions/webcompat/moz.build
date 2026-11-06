@@ -6,7 +6,7 @@ include("generate_files.mozbuild")
 
 JAR_MANIFESTS += ["jar.mn"]
 
-DIRS += ["xpi-build"]
+# DIRS += ["xpi-build"]
 
 include("preprocessed_intervention_files.mozbuild")
 GenerateWebCompatAddonFiles(preprocessed_intervention_files)
