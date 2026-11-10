@@ -201,6 +201,7 @@ jobs:
           # Limit parallel compilation jobs to 2 to prevent host OOM on GitHub 2-core / 7GB runner
           ./mach build --jobs 2 -v
           sccache --show-stats || true
+          sccache --stop-server || true
 
       - name: Package Aether
         env:
