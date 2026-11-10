@@ -600,7 +600,7 @@ class MozbuildObject(ProcessExecutionMixin):
         On Linux and Mac, this will show a desktop notification with the message,
         but on Windows we can only flash the screen.
         """
-        if "MOZ_NOSPAM" in os.environ or "MOZ_AUTOMATION" in os.environ:
+        if "MOZ_NOSPAM" in os.environ or "MOZ_AUTOMATION" in os.environ or "CI" in os.environ or "GITHUB_ACTIONS" in os.environ:
             return
 
         try:
