@@ -193,6 +193,9 @@ jobs:
           RUSTC_WRAPPER: sccache
           CARGO_INCREMENTAL: "0"
           MOZ_BUILD_HOOK: ""
+          MOZ_AUTOMATION: "1"
+          MOZ_NOSPAM: "1"
+          MACH_NOTIFY_MINTIME: "99999999"
         run: |
           set -eux
           # Limit parallel compilation jobs to 2 to prevent host OOM on GitHub 2-core / 7GB runner
@@ -200,6 +203,9 @@ jobs:
           sccache --show-stats || true
 
       - name: Package Aether
+        env:
+          MOZ_AUTOMATION: "1"
+          MOZ_NOSPAM: "1"
         run: |
           set -eux
           ./mach package
